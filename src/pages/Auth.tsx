@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { z } from "zod";
@@ -258,7 +258,5 @@ const Field = ({ label, error, children }: { label: string; error?: string; chil
     {error && <p className="text-xs text-destructive">{error}</p>}
   </div>
 );
-
-import type { ReactNode } from "react";
 
 export default Auth;
