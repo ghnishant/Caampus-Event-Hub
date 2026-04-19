@@ -1,14 +1,14 @@
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { ArrowRight, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import heroMesh from "@/assets/hero-mesh.jpg";
 
-const fade = {
+const fade: Variants = {
   hidden: { opacity: 0, y: 24 },
   show: (i: number = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: 0.1 + i * 0.08, duration: 0.7, ease: [0.16, 1, 0.3, 1] },
+    transition: { delay: 0.1 + i * 0.08, duration: 0.7, ease: [0.16, 1, 0.3, 1] as const },
   }),
 };
 
