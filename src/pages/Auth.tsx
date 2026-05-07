@@ -7,8 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Sparkles, Loader2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
-import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,16 +29,19 @@ type Mode = "login" | "signup";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
-    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-    <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.83z"/>
-    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
+    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+    <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.83z" />
+    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
   </svg>
 );
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { setAuth } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [submitting, setSubmitting] = useState(false);
 
@@ -58,57 +60,74 @@ const Auth = () => {
 
   const onLogin = async (v: z.infer<typeof loginSchema>) => {
     setSubmitting(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: v.email, password: v.password });
-    setSubmitting(false);
-    if (error) return toast.error(error.message);
-    toast.success("Welcome back!");
-    redirectAfter();
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(v),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Login failed");
+
+      setAuth(data.token, data.user);
+      toast.success("Welcome back!");
+      redirectAfter();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const onSignup = async (v: z.infer<typeof signupSchema>) => {
     setSubmitting(true);
-    const { error } = await supabase.auth.signUp({
-      email: v.email,
-      password: v.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-        data: {
-          display_name: v.displayName,
-          requested_role: v.role,
-          admin_invite_code: v.inviteCode ?? "",
-        },
-      },
-    });
-    setSubmitting(false);
-    if (error) return toast.error(error.message);
-    toast.success("Account created — welcome!");
-    redirectAfter();
+    try {
+      const res = await fetch(`${API_URL}/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(v),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Signup failed");
+
+      setAuth(data.token, data.user);
+      toast.success("Account created — welcome!");
+      redirectAfter();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const onGoogle = async () => {
-    setSubmitting(true);
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: `${window.location.origin}/dashboard` });
-    if (result.error) {
-      setSubmitting(false);
-      toast.error("Google sign-in failed");
-      return;
-    }
-    if (result.redirected) return;
-    redirectAfter();
+    toast.info("Google login is not implemented for the MongoDB backend yet.");
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background">
+    <main className="relative min-h-screen overflow-hidden bg-background transition-colors duration-500">
       {/* Decorative gradient */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-40 -left-32 h-[28rem] w-[28rem] rounded-full bg-primary/25 blur-3xl animate-blob" />
-        <div className="absolute -bottom-32 -right-20 h-[28rem] w-[28rem] rounded-full bg-accent/25 blur-3xl animate-blob [animation-delay:-6s]" />
+        <motion.div
+          animate={{
+            backgroundColor: watchRole === "admin" ? "hsl(var(--accent) / 0.15)" : "hsl(var(--primary) / 0.15)",
+            scale: watchRole === "admin" ? 1.2 : 1
+          }}
+          className="absolute -top-40 -left-32 h-[28rem] w-[28rem] rounded-full blur-3xl animate-blob"
+        />
+        <motion.div
+          animate={{
+            backgroundColor: watchRole === "admin" ? "hsl(var(--primary) / 0.15)" : "hsl(var(--accent) / 0.15)",
+            scale: watchRole === "admin" ? 0.9 : 1
+          }}
+          className="absolute -bottom-32 -right-20 h-[28rem] w-[28rem] rounded-full blur-3xl animate-blob [animation-delay:-6s]"
+        />
       </div>
 
       <div className="flex min-h-screen flex-col">
         <header className="flex items-center justify-between px-6 py-5">
-          <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="h-4 w-4" /> Back
+          <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group">
+            <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" /> Back
           </Link>
           <ThemeToggle />
         </header>
@@ -121,14 +140,17 @@ const Auth = () => {
             className="w-full max-w-md"
           >
             <div className="text-center mb-8">
-              <div className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-hero shadow-glow">
+              <motion.div
+                layout
+                className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-hero shadow-glow"
+              >
                 <Sparkles className="h-5 w-5 text-primary-foreground" />
-              </div>
+              </motion.div>
               <h1 className="font-display text-3xl font-bold tracking-tight">
-                {mode === "login" ? "Welcome back." : "Join CampusHub."}
+                {mode === "login" ? "Welcome back." : watchRole === "admin" ? "Admin Portal." : "Join Campus Event Hub."}
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                {mode === "login" ? "Sign in to continue to your events." : "Create your account in seconds."}
+                {mode === "login" ? "Sign in to continue to your workspace." : "Create your account to start organizing events."}
               </p>
             </div>
 

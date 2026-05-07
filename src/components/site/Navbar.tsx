@@ -23,7 +23,7 @@ export const Navbar = () => {
           <span className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-hero shadow-glow">
             <Sparkles className="h-4 w-4 text-primary-foreground" />
           </span>
-          Campus<span className="text-gradient-hero">Hub</span>
+          Campus<span className="text-gradient-hero">Event Hub </span>
         </Link>
         <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
           <a href="#features" className="hover:text-foreground transition-colors">Features</a>

@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { ReactNode, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, Calendar, Ticket, Users, BarChart3, Sparkles, LogOut, Menu, X, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Calendar, Ticket, Users, BarChart3, Sparkles, LogOut, Menu, X, ChevronDown, QrCode } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -23,6 +23,7 @@ const adminNav: NavItem[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard },
   { to: "/admin/events", label: "Events", icon: Calendar },
   { to: "/admin/registrations", label: "Registrations", icon: Users },
+  { to: "/admin/scanner", label: "QR Scanner", icon: QrCode },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
@@ -71,7 +72,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
               className="fixed inset-y-0 left-0 z-50 w-64 border-r border-border bg-card px-4 py-6 lg:hidden"
             >
               <div className="flex items-center justify-between mb-6 px-2">
-                <span className="font-display font-bold">CampusHub</span>
+                <span className="font-display font-bold">Campus Event Hub</span>
                 <Button size="icon" variant="ghost" onClick={() => setMobileOpen(false)}>
                   <X className="h-4 w-4" />
                 </Button>
@@ -137,10 +138,9 @@ const SidebarLinks = ({ items, onNavigate }: { items: NavItem[]; onNavigate?: ()
         end
         onClick={onNavigate}
         className={({ isActive }) =>
-          `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
-            isActive
-              ? "bg-gradient-hero text-primary-foreground shadow-glow"
-              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${isActive
+            ? "bg-gradient-hero text-primary-foreground shadow-glow"
+            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
           }`
         }
       >

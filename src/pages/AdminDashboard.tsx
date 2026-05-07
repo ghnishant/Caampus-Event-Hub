@@ -1,43 +1,55 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Calendar, Users, Activity, TrendingUp } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Area, AreaChart } from "recharts";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app/AppShell";
 import { StatCard } from "@/components/app/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Stats { totalEvents: number; totalRegistrations: number; checkedIn: number; }
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
 const AdminDashboard = () => {
+  const { token } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [chart, setChart] = useState<{ day: string; regs: number }[]>([]);
 
   useEffect(() => {
+    if (!token) return;
     (async () => {
-      const [{ count: e }, { count: r }, { count: a }, { data: recent }] = await Promise.all([
-        supabase.from("events").select("id", { count: "exact", head: true }),
-        supabase.from("registrations").select("id", { count: "exact", head: true }),
-        supabase.from("registrations").select("id", { count: "exact", head: true }).eq("attended", true),
-        supabase.from("registrations").select("created_at").gte("created_at", new Date(Date.now() - 7 * 864e5).toISOString()),
-      ]);
+      try {
+        const res = await fetch(`${API_URL}/events/stats`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Failed to fetch stats");
+        const data = await res.json();
 
-      setStats({ totalEvents: e ?? 0, totalRegistrations: r ?? 0, checkedIn: a ?? 0 });
+        setStats({
+          totalEvents: data.totalEvents,
+          totalRegistrations: data.totalRegistrations,
+          checkedIn: data.checkedIn,
+        });
 
-      // Build last-7-days bucket
-      const buckets = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (6 - i));
-        return { day: d.toLocaleDateString(undefined, { weekday: "short" }), key: d.toISOString().slice(0, 10), regs: 0 };
-      });
-      (recent ?? []).forEach((row: { created_at: string }) => {
-        const k = row.created_at.slice(0, 10);
-        const b = buckets.find((b) => b.key === k);
-        if (b) b.regs += 1;
-      });
-      setChart(buckets.map(({ day, regs }) => ({ day, regs })));
+        // Build last-7-days bucket
+        const buckets = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(); d.setDate(d.getDate() - (6 - i));
+          return { day: d.toLocaleDateString(undefined, { weekday: "short" }), key: d.toISOString().slice(0, 10), regs: 0 };
+        });
+        
+        (data.recentRegistrations ?? []).forEach((row: { createdAt: string }) => {
+          const k = row.createdAt.slice(0, 10);
+          const b = buckets.find((b) => b.key === k);
+          if (b) b.regs += 1;
+        });
+        setChart(buckets.map(({ day, regs }) => ({ day, regs })));
+      } catch (err) {
+        console.error(err);
+      }
     })();
-  }, []);
+  }, [token]);
 
   return (
     <AppShell>

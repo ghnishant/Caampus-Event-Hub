@@ -1,76 +1,87 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
 
 export type AppRole = "admin" | "student";
 
+export interface AppUser {
+  id: string;
+  email: string;
+  displayName?: string;
+  role: AppRole;
+}
+
 interface AuthContextValue {
-  session: Session | null;
-  user: User | null;
+  token: string | null;
+  user: AppUser | null;
   role: AppRole | null;
   loading: boolean;
   signOut: () => Promise<void>;
-  refreshRole: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  setAuth: (token: string, user: AppUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
-  session: null,
+  token: null,
   user: null,
   role: null,
   loading: true,
   signOut: async () => {},
-  refreshRole: async () => {},
+  refreshUser: async () => {},
+  setAuth: () => {},
 });
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<AppRole | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem("auth_token"));
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchRole = async (uid: string) => {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", uid)
-      .maybeSingle();
-    setRole((data?.role as AppRole) ?? "student");
+  const fetchUser = async (authToken: string) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+      } else {
+        localStorage.removeItem("auth_token");
+        setToken(null);
+        setUser(null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch user:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    // 1. Subscribe FIRST, then check existing session
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      if (newSession?.user) {
-        // Defer DB call to avoid deadlock
-        setTimeout(() => fetchRole(newSession.user.id), 0);
-      } else {
-        setRole(null);
-      }
-    });
-
-    supabase.auth.getSession().then(({ data: { session: existing } }) => {
-      setSession(existing);
-      setUser(existing?.user ?? null);
-      if (existing?.user) fetchRole(existing.user.id);
+    if (token) {
+      fetchUser(token);
+    } else {
       setLoading(false);
-    });
+    }
+  }, [token]);
 
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setRole(null);
+  const setAuth = (newToken: string, newUser: AppUser) => {
+    localStorage.setItem("auth_token", newToken);
+    setToken(newToken);
+    setUser(newUser);
   };
 
-  const refreshRole = async () => {
-    if (user) await fetchRole(user.id);
+  const signOut = async () => {
+    localStorage.removeItem("auth_token");
+    setToken(null);
+    setUser(null);
+  };
+
+  const refreshUser = async () => {
+    if (token) await fetchUser(token);
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, loading, signOut, refreshRole }}>
+    <AuthContext.Provider value={{ token, user, role: user?.role ?? null, loading, signOut, refreshUser, setAuth }}>
       {children}
     </AuthContext.Provider>
   );

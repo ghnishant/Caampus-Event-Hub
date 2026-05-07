@@ -1,7 +1,12 @@
 import { motion, type Variants } from "framer-motion";
 import { ArrowRight, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import heroMesh from "@/assets/hero-mesh.jpg";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const fade: Variants = {
   hidden: { opacity: 0, y: 24 },
@@ -13,6 +18,18 @@ const fade: Variants = {
 };
 
 export const Hero = () => {
+  const { user, role } = useAuth();
+  const [stats, setStats] = useState({ totalEvents: 0, totalRegistrations: 0, checkedIn: 0 });
+
+  useEffect(() => {
+    fetch(`${API_URL}/events/public-stats`)
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(err => console.error("Error fetching stats:", err));
+  }, []);
+
+  const launchHref = user ? (role === "admin" ? "/admin/events" : "/dashboard/events") : "/auth";
+
   return (
     <section className="relative overflow-hidden pt-32 pb-24 sm:pt-40 sm:pb-32">
       {/* Animated background blobs */}
@@ -71,11 +88,13 @@ export const Hero = () => {
           animate="show"
           className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3"
         >
-          <Button variant="hero" size="lg" className="group">
-            Launch your first event
-            <ArrowRight className="transition-transform group-hover:translate-x-1" />
+          <Button asChild variant="hero" size="lg" className="group">
+            <Link to={launchHref}>
+              Launch your first event
+              <ArrowRight className="transition-transform group-hover:translate-x-1" />
+            </Link>
           </Button>
-          <Button variant="glass" size="lg">
+          <Button variant="glass" size="lg" onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>
             <QrCode />
             See it in action
           </Button>
@@ -92,9 +111,9 @@ export const Hero = () => {
             <div className="rounded-2xl bg-gradient-subtle p-8 sm:p-12">
               <div className="grid grid-cols-3 gap-6 text-left">
                 {[
-                  { label: "Live events", value: "248" },
-                  { label: "Registrations", value: "12.4k" },
-                  { label: "Check-ins today", value: "1,892" },
+                  { label: "Live events", value: stats.totalEvents.toLocaleString() },
+                  { label: "Registrations", value: stats.totalRegistrations.toLocaleString() },
+                  { label: "Check-ins today", value: stats.checkedIn.toLocaleString() },
                 ].map((s) => (
                   <div key={s.label}>
                     <div className="font-display text-3xl sm:text-4xl font-bold text-gradient-hero">{s.value}</div>

@@ -4,7 +4,6 @@ import { CalendarCheck, Ticket, Sparkles, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app/AppShell";
 import { StatCard } from "@/components/app/StatCard";
 import { Button } from "@/components/ui/button";
@@ -12,31 +11,27 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 interface Stats { registered: number; upcoming: number; attended: number; }
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
 const StudentDashboard = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [displayName, setDisplayName] = useState<string>("");
 
   useEffect(() => {
-    if (!user) return;
+    if (!token) return;
     (async () => {
-      const [{ count: registered }, { count: attended }, { data: profile }] = await Promise.all([
-        supabase.from("registrations").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-        supabase.from("registrations").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("attended", true),
-        supabase.from("profiles").select("display_name").eq("user_id", user.id).maybeSingle(),
-      ]);
-
-      // upcoming: registrations whose event hasn't started
-      const { data: regs } = await supabase
-        .from("registrations")
-        .select("event_id, events!inner(starts_at)")
-        .eq("user_id", user.id);
-      const upcoming = (regs ?? []).filter((r: any) => new Date(r.events.starts_at) > new Date()).length;
-
-      setStats({ registered: registered ?? 0, attended: attended ?? 0, upcoming });
-      setDisplayName(profile?.display_name ?? user.email?.split("@")[0] ?? "");
+      try {
+        const res = await fetch(`${API_URL}/events/student-stats`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Failed to fetch stats");
+        const data = await res.json();
+        setStats(data);
+      } catch (err) {
+        console.error(err);
+      }
     })();
-  }, [user]);
+  }, [token]);
 
   return (
     <AppShell>
@@ -47,7 +42,7 @@ const StudentDashboard = () => {
       >
         <p className="text-sm text-muted-foreground">Welcome back</p>
         <h1 className="mt-1 font-display text-4xl sm:text-5xl font-bold tracking-tight">
-          Hey {displayName || "there"} <span className="text-gradient-hero">👋</span>
+          Hey {user?.displayName || user?.email?.split("@")[0] || "there"} <span className="text-gradient-hero">👋</span>
         </h1>
         <p className="mt-2 text-muted-foreground max-w-xl">
           Here's a quick look at your campus activity. Discover new events and bring your tickets to check-in.

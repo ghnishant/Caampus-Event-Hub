@@ -6,11 +6,17 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import Index from "./pages/Index.tsx";
-import Auth from "./pages/Auth.tsx";
-import StudentDashboard from "./pages/StudentDashboard.tsx";
-import AdminDashboard from "./pages/AdminDashboard.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import Index from "./pages/Index";
+import Auth from "./pages/Auth";
+import StudentDashboard from "./pages/StudentDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
+import Events from "./pages/Events";
+import MyTickets from "./pages/MyTickets";
+import AdminEvents from "./pages/AdminEvents";
+import Registrations from "./pages/Registrations";
+import Analytics from "./pages/Analytics";
+import Scanner from "./pages/Scanner";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +31,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
+              
+              {/* Student Routes */}
               <Route
                 path="/dashboard"
                 element={
@@ -34,6 +42,24 @@ const App = () => (
                 }
               />
               <Route
+                path="/dashboard/events"
+                element={
+                  <ProtectedRoute requireRole="student">
+                    <Events />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard/tickets"
+                element={
+                  <ProtectedRoute requireRole="student">
+                    <MyTickets />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Admin Routes */}
+              <Route
                 path="/admin"
                 element={
                   <ProtectedRoute requireRole="admin">
@@ -41,6 +67,39 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/admin/events"
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <AdminEvents />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/registrations"
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <Registrations />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/scanner"
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <Scanner />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/analytics"
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <Analytics />
+                  </ProtectedRoute>
+                }
+              />
+
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
