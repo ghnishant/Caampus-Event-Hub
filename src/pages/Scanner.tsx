@@ -1,23 +1,22 @@
 import { useEffect, useState, useRef } from "react";
 import { AppShell } from "@/components/app/AppShell";
 import { motion, AnimatePresence } from "framer-motion";
-import { QrCode, Loader2, CheckCircle2, XCircle, Camera, RefreshCw, Keyboard, Upload, Image as ImageIcon } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Keyboard, Upload } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { supabase } from "@/lib/supabase";
 
 const Scanner = () => {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const [isScanning, setIsScanning] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [checking, setChecking] = useState(false);
   const [manualId, setManualId] = useState("");
   const [hasCamera, setHasCamera] = useState(false);
-  
+
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const readerId = "reader";
@@ -31,27 +30,19 @@ const Scanner = () => {
     }).catch(err => {
       console.error("No cameras found", err);
     });
-
-    return () => {
-      stopScanner();
-    };
+    return () => { stopScanner(); };
   }, []);
 
   const startScanner = async () => {
     try {
       if (scannerRef.current) await stopScanner();
-      
       const html5QrCode = new Html5Qrcode(readerId);
       scannerRef.current = html5QrCode;
       setIsScanning(true);
-
       await html5QrCode.start(
-        { facingMode: "environment" }, 
+        { facingMode: "environment" },
         { fps: 20, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          handleCheckIn(decodedText);
-          stopScanner();
-        },
+        (decodedText) => { handleCheckIn(decodedText); stopScanner(); },
         () => {}
       );
     } catch (err) {
@@ -62,19 +53,14 @@ const Scanner = () => {
 
   const stopScanner = async () => {
     if (scannerRef.current && scannerRef.current.isScanning) {
-      try {
-        await scannerRef.current.stop();
-        setIsScanning(false);
-      } catch (err) {
-        console.error("Failed to stop scanner", err);
-      }
+      try { await scannerRef.current.stop(); setIsScanning(false); }
+      catch (err) { console.error("Failed to stop scanner", err); }
     }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setChecking(true);
     try {
       const html5QrCode = new Html5Qrcode("reader-hidden");
@@ -89,18 +75,49 @@ const Scanner = () => {
   const handleCheckIn = async (registrationId: string) => {
     setChecking(true);
     try {
-      const res = await fetch(`${API_URL}/events/check-in`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ registrationId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Check-in failed");
-      
-      setResult({ success: true, ...data.registration });
+      // Try exact UUID match first
+      let regId = registrationId.trim();
+
+      // If it's a short ID (suffix match), find the full UUID
+      if (regId.length < 36) {
+        const { data: allRegs } = await supabase
+          .from("registrations")
+          .select("id")
+          .eq("attended", false);
+
+        const match = (allRegs ?? []).find(r =>
+          r.id.toUpperCase().endsWith(regId.toUpperCase())
+        );
+        if (!match) throw new Error(`Ticket ${regId} not found.`);
+        regId = match.id;
+      }
+
+      // Check if registration exists
+      const { data: reg, error: fetchError } = await supabase
+        .from("registrations")
+        .select("id, attended")
+        .eq("id", regId)
+        .single();
+
+      if (fetchError || !reg) throw new Error(`Ticket ${registrationId} not found.`);
+      if (reg.attended) throw new Error("This ticket has already been used for check-in.");
+
+      // Mark as attended
+      const { error: updateError } = await supabase
+        .from("registrations")
+        .update({ attended: true })
+        .eq("id", regId);
+
+      if (updateError) throw new Error(updateError.message);
+
+      // Fetch full details for display
+      const { data: populated } = await supabase
+        .from("registrations")
+        .select("*, profiles(display_name, email), events(title)")
+        .eq("id", regId)
+        .single();
+
+      setResult({ success: true, ...(populated as any) });
       toast.success("Check-in successful!");
     } catch (err: any) {
       setResult({ success: false, message: err.message });
@@ -120,12 +137,8 @@ const Scanner = () => {
     <AppShell>
       <div className="max-w-xl mx-auto">
         <header className="mb-8 text-center">
-          <h1 className="font-display text-4xl font-bold tracking-tight">
-            Verify <span className="text-gradient-hero">Tickets.</span>
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Scan, upload, or enter ID manually to mark attendance.
-          </p>
+          <h1 className="font-display text-4xl font-bold tracking-tight">Verify <span className="text-gradient-hero">Tickets.</span></h1>
+          <p className="mt-2 text-muted-foreground">Scan, upload, or enter ID manually to mark attendance.</p>
         </header>
 
         <div className="relative aspect-square w-full max-w-[400px] mx-auto overflow-hidden rounded-[3rem] border-8 border-card bg-black shadow-elevated">
@@ -161,9 +174,9 @@ const Scanner = () => {
                 <div className="text-sm text-muted-foreground mb-8">
                   {result.success ? (
                     <>
-                      <p className="font-bold text-foreground text-lg">{result.userId?.displayName}</p>
+                      <p className="font-bold text-foreground text-lg">{result.profiles?.display_name}</p>
                       <p>{result.year} · {result.department}</p>
-                      <p className="mt-2 text-primary font-medium">{result.eventId?.title}</p>
+                      <p className="mt-2 text-primary font-medium">{result.events?.title}</p>
                     </>
                   ) : (
                     <p className="bg-destructive/10 text-destructive p-3 rounded-xl border border-destructive/20">
@@ -185,7 +198,6 @@ const Scanner = () => {
             </div>
             <Button type="submit" variant="secondary" className="rounded-2xl h-12 px-6">Verify</Button>
           </form>
-          
           <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
           <div id="reader-hidden" className="hidden" />
         </div>

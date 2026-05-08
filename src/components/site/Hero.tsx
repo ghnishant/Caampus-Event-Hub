@@ -4,9 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 import heroMesh from "@/assets/hero-mesh.jpg";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const fade: Variants = {
   hidden: { opacity: 0, y: 24 },
@@ -22,10 +21,22 @@ export const Hero = () => {
   const [stats, setStats] = useState({ totalEvents: 0, totalRegistrations: 0, checkedIn: 0 });
 
   useEffect(() => {
-    fetch(`${API_URL}/events/public-stats`)
-      .then(res => res.json())
-      .then(data => setStats(data))
-      .catch(err => console.error("Error fetching stats:", err));
+    (async () => {
+      try {
+        const [eventsRes, regsRes, checkedRes] = await Promise.all([
+          supabase.from("events").select("id", { count: "exact", head: true }),
+          supabase.from("registrations").select("id", { count: "exact", head: true }),
+          supabase.from("registrations").select("id", { count: "exact", head: true }).eq("attended", true),
+        ]);
+        setStats({
+          totalEvents: eventsRes.count ?? 0,
+          totalRegistrations: regsRes.count ?? 0,
+          checkedIn: checkedRes.count ?? 0,
+        });
+      } catch (err) {
+        console.error("Error fetching stats:", err);
+      }
+    })();
   }, []);
 
   const launchHref = user ? (role === "admin" ? "/admin/events" : "/dashboard/events") : "/auth";

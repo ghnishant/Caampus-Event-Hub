@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 
 export type AppRole = "admin" | "student";
 
@@ -10,78 +12,104 @@ export interface AppUser {
 }
 
 interface AuthContextValue {
-  token: string | null;
+  session: Session | null;
   user: AppUser | null;
   role: AppRole | null;
   loading: boolean;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  setAuth: (token: string, user: AppUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
-  token: null,
+  session: null,
   user: null,
   role: null,
   loading: true,
   signOut: async () => {},
   refreshUser: async () => {},
-  setAuth: () => {},
 });
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [token, setToken] = useState<string | null>(localStorage.getItem("auth_token"));
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUser = async (authToken: string) => {
+  const fetchProfile = async (userId: string, email: string) => {
     try {
-      const res = await fetch(`${API_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-      } else {
-        localStorage.removeItem("auth_token");
-        setToken(null);
-        setUser(null);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("display_name, role")
+        .eq("id", userId)
+        .single();
+
+      if (error || !data) {
+        console.error("Failed to fetch profile:", error);
+        setUser({ id: userId, email, role: "student" });
+        return;
       }
+
+      setUser({
+        id: userId,
+        email,
+        displayName: data.display_name,
+        role: data.role as AppRole,
+      });
     } catch (err) {
-      console.error("Failed to fetch user:", err);
-    } finally {
-      setLoading(false);
+      console.error("Profile fetch error:", err);
+      setUser({ id: userId, email, role: "student" });
     }
   };
 
   useEffect(() => {
-    if (token) {
-      fetchUser(token);
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      if (s?.user) {
+        fetchProfile(s.user.id, s.user.email ?? "").then(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    });
 
-  const setAuth = (newToken: string, newUser: AppUser) => {
-    localStorage.setItem("auth_token", newToken);
-    setToken(newToken);
-    setUser(newUser);
-  };
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, s) => {
+        setSession(s);
+        if (s?.user) {
+          await fetchProfile(s.user.id, s.user.email ?? "");
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const signOut = async () => {
-    localStorage.removeItem("auth_token");
-    setToken(null);
+    await supabase.auth.signOut();
+    setSession(null);
     setUser(null);
   };
 
   const refreshUser = async () => {
-    if (token) await fetchUser(token);
+    if (session?.user) {
+      await fetchProfile(session.user.id, session.user.email ?? "");
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, role: user?.role ?? null, loading, signOut, refreshUser, setAuth }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        user,
+        role: user?.role ?? null,
+        loading,
+        signOut,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

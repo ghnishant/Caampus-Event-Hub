@@ -8,30 +8,50 @@ import { AppShell } from "@/components/app/AppShell";
 import { StatCard } from "@/components/app/StatCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/lib/supabase";
 
 interface Stats { registered: number; upcoming: number; attended: number; }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
 const StudentDashboard = () => {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/events/student-stats`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const { count: registered } = await supabase
+          .from("registrations")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id);
+
+        const { count: attended } = await supabase
+          .from("registrations")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("attended", true);
+
+        // For upcoming, we need to join with events and filter by starts_at > now
+        const { data: regs } = await supabase
+          .from("registrations")
+          .select("id, events(starts_at)")
+          .eq("user_id", user.id);
+
+        const upcoming = (regs ?? []).filter((r: any) => {
+          const startsAt = r.events?.starts_at;
+          return startsAt && new Date(startsAt) > new Date();
+        }).length;
+
+        setStats({
+          registered: registered ?? 0,
+          upcoming,
+          attended: attended ?? 0,
         });
-        if (!res.ok) throw new Error("Failed to fetch stats");
-        const data = await res.json();
-        setStats(data);
       } catch (err) {
         console.error(err);
       }
     })();
-  }, [token]);
+  }, [user]);
 
   return (
     <AppShell>

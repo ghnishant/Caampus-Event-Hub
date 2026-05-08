@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { supabase } from "@/lib/supabase";
 
 const hues = [
   "from-violet-500 to-fuchsia-500",
@@ -23,14 +22,17 @@ export const EventsPreview = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/events`)
-      .then(res => res.json())
-      .then(data => {
-        setEvents(data.slice(0, 3)); // Only show first 3 for preview
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("Error fetching events:", err);
+    supabase
+      .from("events")
+      .select("*")
+      .order("starts_at", { ascending: true })
+      .limit(3)
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Error fetching events:", error);
+        } else {
+          setEvents(data ?? []);
+        }
         setLoading(false);
       });
   }, []);
@@ -66,14 +68,14 @@ export const EventsPreview = () => {
         ) : (
           <div className="grid gap-6 md:grid-cols-3">
             {events.map((e, i) => {
-              const date = new Date(e.startsAt);
+              const date = new Date(e.starts_at);
               const month = date.toLocaleString('default', { month: 'short' });
               const day = date.getDate();
               const hue = hues[i % hues.length];
 
               return (
                 <motion.article
-                  key={e._id}
+                  key={e.id}
                   initial={{ opacity: 0, y: 40 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-80px" }}
@@ -84,7 +86,7 @@ export const EventsPreview = () => {
                   <div className={`relative h-44 bg-gradient-to-br ${hue} overflow-hidden`}>
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,white,transparent_60%)] opacity-30" />
                     <span className="absolute top-4 left-4 inline-flex rounded-full glass border border-white/30 px-3 py-1 text-xs font-medium text-white">
-                      {e.maxTeamSize > 1 ? "Team Event" : "Individual"}
+                      {e.max_team_size > 1 ? "Team Event" : "Individual"}
                     </span>
                     <div className="absolute bottom-4 right-4 font-display text-3xl font-bold text-white drop-shadow">
                       {month} {day}
@@ -94,7 +96,7 @@ export const EventsPreview = () => {
                     <h3 className="font-display text-xl font-semibold group-hover:text-primary transition-colors">{e.title}</h3>
                     <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
                       <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4" />{e.location}</span>
-                      <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4" />{e.maxParticipants || "∞"} spots</span>
+                      <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4" />{e.max_participants || "∞"} spots</span>
                     </div>
                     <Button asChild variant="default" size="sm" className="mt-5 w-full">
                       <Link to={browseHref}>Register</Link>

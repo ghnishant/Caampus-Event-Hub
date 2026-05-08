@@ -6,28 +6,34 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useAuth } from "@/hooks/use-auth";
 import { StatCard } from "@/components/app/StatCard";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
 const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042'];
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const Analytics = () => {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<any>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/events/stats`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const [eventsRes, regsRes, checkedRes] = await Promise.all([
+          supabase.from("events").select("id", { count: "exact", head: true }),
+          supabase.from("registrations").select("id", { count: "exact", head: true }),
+          supabase.from("registrations").select("id", { count: "exact", head: true }).eq("attended", true),
+        ]);
+
+        setData({
+          totalEvents: eventsRes.count ?? 0,
+          totalRegistrations: regsRes.count ?? 0,
+          checkedIn: checkedRes.count ?? 0,
         });
-        const stats = await res.json();
-        setData(stats);
       } catch (err) {
         toast.error("Failed to load analytics");
       }
     })();
-  }, [token]);
+  }, [user]);
 
   const pieData = [
     { name: 'Attended', value: data?.checkedIn || 0 },

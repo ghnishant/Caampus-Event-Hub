@@ -8,6 +8,7 @@ import { Sparkles, Loader2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,8 @@ const loginSchema = z.object({
 
 type Mode = "login" | "signup";
 
+const ADMIN_INVITE_CODE = import.meta.env.VITE_ADMIN_INVITE_CODE || "TASKADMIN_2026";
+
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -36,12 +39,10 @@ const GoogleIcon = () => (
   </svg>
 );
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
 const Auth = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setAuth } = useAuth();
+  const { refreshUser } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [submitting, setSubmitting] = useState(false);
 
@@ -61,15 +62,13 @@ const Auth = () => {
   const onLogin = async (v: z.infer<typeof loginSchema>) => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(v),
+      const { error } = await supabase.auth.signInWithPassword({
+        email: v.email,
+        password: v.password,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Login failed");
+      if (error) throw new Error(error.message);
 
-      setAuth(data.token, data.user);
+      await refreshUser();
       toast.success("Welcome back!");
       redirectAfter();
     } catch (err: any) {
@@ -82,15 +81,30 @@ const Auth = () => {
   const onSignup = async (v: z.infer<typeof signupSchema>) => {
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/auth/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(v),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Signup failed");
+      // Validate admin invite code
+      let assignedRole: "student" | "admin" = "student";
+      if (v.role === "admin") {
+        if (v.inviteCode !== ADMIN_INVITE_CODE) {
+          throw new Error("Invalid admin invite code");
+        }
+        assignedRole = "admin";
+      }
 
-      setAuth(data.token, data.user);
+      const { error } = await supabase.auth.signUp({
+        email: v.email,
+        password: v.password,
+        options: {
+          data: {
+            display_name: v.displayName,
+            role: assignedRole,
+          },
+        },
+      });
+      if (error) throw new Error(error.message);
+
+      // Small delay to let the trigger create the profile
+      await new Promise((r) => setTimeout(r, 500));
+      await refreshUser();
       toast.success("Account created — welcome!");
       redirectAfter();
     } catch (err: any) {
@@ -101,7 +115,19 @@ const Auth = () => {
   };
 
   const onGoogle = async () => {
-    toast.info("Google login is not implemented for the MongoDB backend yet.");
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin + "/dashboard",
+        },
+      });
+      if (error) throw new Error(error.message);
+    } catch (err: any) {
+      toast.error(err.message);
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -155,8 +181,9 @@ const Auth = () => {
             </div>
 
             <div className="glass rounded-3xl border border-border p-7 shadow-elevated">
-              <Button type="button" variant="outline" className="w-full" onClick={onGoogle} disabled={submitting}>
-                <GoogleIcon /> Continue with Google
+              <Button type="button" variant="outline" className="w-full gap-2" onClick={onGoogle} disabled={submitting}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />} 
+                Continue with Google
               </Button>
 
               <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-widest text-muted-foreground">

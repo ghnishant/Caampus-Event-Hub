@@ -7,40 +7,45 @@ import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app/AppShell";
 import { StatCard } from "@/components/app/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/lib/supabase";
 
 interface Stats { totalEvents: number; totalRegistrations: number; checkedIn: number; }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
 const AdminDashboard = () => {
-  const { token } = useAuth();
+  const { user } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [chart, setChart] = useState<{ day: string; regs: number }[]>([]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!user) return;
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/events/stats`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("Failed to fetch stats");
-        const data = await res.json();
+        const [eventsRes, regsRes, checkedRes] = await Promise.all([
+          supabase.from("events").select("id", { count: "exact", head: true }),
+          supabase.from("registrations").select("id", { count: "exact", head: true }),
+          supabase.from("registrations").select("id", { count: "exact", head: true }).eq("attended", true),
+        ]);
 
         setStats({
-          totalEvents: data.totalEvents,
-          totalRegistrations: data.totalRegistrations,
-          checkedIn: data.checkedIn,
+          totalEvents: eventsRes.count ?? 0,
+          totalRegistrations: regsRes.count ?? 0,
+          checkedIn: checkedRes.count ?? 0,
         });
 
-        // Build last-7-days bucket
+        // Build last-7-days chart
+        const sevenDaysAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+        const { data: recentRegs } = await supabase
+          .from("registrations")
+          .select("created_at")
+          .gte("created_at", sevenDaysAgo);
+
         const buckets = Array.from({ length: 7 }, (_, i) => {
           const d = new Date(); d.setDate(d.getDate() - (6 - i));
           return { day: d.toLocaleDateString(undefined, { weekday: "short" }), key: d.toISOString().slice(0, 10), regs: 0 };
         });
-        
-        (data.recentRegistrations ?? []).forEach((row: { createdAt: string }) => {
-          const k = row.createdAt.slice(0, 10);
+
+        (recentRegs ?? []).forEach((row) => {
+          const k = row.created_at.slice(0, 10);
           const b = buckets.find((b) => b.key === k);
           if (b) b.regs += 1;
         });
@@ -49,7 +54,7 @@ const AdminDashboard = () => {
         console.error(err);
       }
     })();
-  }, [token]);
+  }, [user]);
 
   return (
     <AppShell>
@@ -106,14 +111,7 @@ const AdminDashboard = () => {
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  background: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: 12,
-                  fontSize: 12,
-                }}
-              />
+              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
               <Area type="monotone" dataKey="regs" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#regs)" />
             </AreaChart>
           </ResponsiveContainer>
